@@ -29,18 +29,18 @@
 #include "gc.h"
 #include "pilight_firmware.h"
 
-void pilightFirmwareCreateMessage(int id, int high, int low) {
+void pilightFirmwareCreateMessage(int version, int high, int low) {
 	pilight_firmware->message = json_mkobject();
-	json_append_member(pilight_firmware->message, "version", json_mknumber(id));
+	json_append_member(pilight_firmware->message, "version", json_mknumber(version));
 	json_append_member(pilight_firmware->message, "lpf", json_mknumber(high*10));
 	json_append_member(pilight_firmware->message, "hpf", json_mknumber(low*10));
 }
 
 void pilightFirmwareParseBinary(void) {
-	int id = binToDec(pilight_firmware->binary, 0, 15);
+	int version = binToDec(pilight_firmware->binary, 0, 15);
 	int high = binToDec(pilight_firmware->binary, 16, 31);
 	int low = binToDec(pilight_firmware->binary, 32, 47);
-	pilightFirmwareCreateMessage(id, high, low);
+	pilightFirmwareCreateMessage(version, high, low);
 }
 
 void pilightFirmwareInit(void) {
@@ -48,7 +48,8 @@ void pilightFirmwareInit(void) {
   protocol_register(&pilight_firmware);
   protocol_set_id(pilight_firmware, "pilight_firmware");
   protocol_device_add(pilight_firmware, "pilight_firmware", "pilight filter firmware");
-  protocol_plslen_add(pilight_firmware, 232);
+  protocol_plslen_add(pilight_firmware, 230);
+  protocol_plslen_add(pilight_firmware, 220);
 
   pilight_firmware->devtype = INTERNAL;
   pilight_firmware->hwtype = HWINTERNAL;
@@ -56,9 +57,9 @@ void pilightFirmwareInit(void) {
   pilight_firmware->rawlen = 196;
   pilight_firmware->lsb = 3;
 
-  options_add(&pilight_firmware->options, 'v', "version", has_value, config_id, "^[0-9]+$");
-  options_add(&pilight_firmware->options, 'l', "lpf", has_value, config_id, "^[0-9]+$");
-  options_add(&pilight_firmware->options, 'h', "hpf", has_value, config_id, "^[0-9]+$");
+  options_add(&pilight_firmware->options, 'v', "version", OPTION_HAS_VALUE, CONFIG_ID, JSON_NUMBER, NULL, "^[0-9]+$");
+  options_add(&pilight_firmware->options, 'l', "lpf", OPTION_HAS_VALUE, CONFIG_ID, JSON_NUMBER, NULL, "^[0-9]+$");
+  options_add(&pilight_firmware->options, 'h', "hpf", OPTION_HAS_VALUE, CONFIG_ID, JSON_NUMBER, NULL, "^[0-9]+$");
 
   pilight_firmware->parseBinary=&pilightFirmwareParseBinary;
 }

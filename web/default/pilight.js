@@ -1,4 +1,5 @@
 var oWebsocket = false;
+var bForceAjax = false;
 var bConnected = false;
 var bInitialized = false;
 var bSending = false;
@@ -98,7 +99,9 @@ function createSwitchElement(sTabId, sDevId, aValues) {
 		} else {
 			oTab = $('#all');
 		}
-		oTab.append($('<li id="'+sTabId+'_'+sDevId+'" class="switch" data-icon="false">'+aValues['name']+'<select id="'+sTabId+'_'+sDevId+'_switch" data-role="slider"><option value="off">Off</option><option value="on">On</option></select></li>'));
+		if('name' in aValues) {
+			oTab.append($('<li id="'+sTabId+'_'+sDevId+'" class="switch" data-icon="false">'+aValues['name']+'<select id="'+sTabId+'_'+sDevId+'_switch" data-role="slider"><option value="off">Off</option><option value="on">On</option></select></li>'));
+		}
 		$('#'+sTabId+'_'+sDevId+'_switch').slider();
 		$('#'+sTabId+'_'+sDevId+'_switch').bind("change", function(event, ui) {
 			event.stopPropagation();
@@ -114,14 +117,16 @@ function createSwitchElement(sTabId, sDevId, aValues) {
 		oTab.listview();
 		oTab.listview("refresh");
 	}
-	if(aValues['state'] === "on" || aValues['state'] === "opened") {
-		$('#'+sTabId+'_'+sDevId+'_switch')[0].selectedIndex = 1;
-		$('#'+sTabId+'_'+sDevId+'_switch').slider('refresh');
-	} else {
-		$('#'+sTabId+'_'+sDevId+'_switch')[0].selectedIndex = 0;
-		$('#'+sTabId+'_'+sDevId+'_switch').slider('refresh');
+	if('state' in aValues) {
+		if(aValues['state'] === "on" || aValues['state'] === "opened") {
+			$('#'+sTabId+'_'+sDevId+'_switch')[0].selectedIndex = 1;
+			$('#'+sTabId+'_'+sDevId+'_switch').slider('refresh');
+		} else {
+			$('#'+sTabId+'_'+sDevId+'_switch')[0].selectedIndex = 0;
+			$('#'+sTabId+'_'+sDevId+'_switch').slider('refresh');
+		}
 	}
-	if(aValues['settings']['readonly']) {
+	if('gui-readonly' in aValues && aValues['gui-readonly']) {
 		$('#'+sTabId+'_'+sDevId+'_switch').slider('disable');
 	}
 }
@@ -133,7 +138,9 @@ function createScreenElement(sTabId, sDevId, aValues) {
 		} else {
 			oTab = $('#all');
 		}
-		oTab.append($('<li  id="'+sTabId+'_'+sDevId+'" class="screen" data-icon="false">'+aValues['name']+'<div id="'+sTabId+'_'+sDevId+'_screen" class="screen" data-role="fieldcontain" data-type="horizontal"><fieldset data-role="controlgroup" class="controlgroup" data-type="horizontal" data-mini="true"><input type="radio" name="'+sTabId+'_'+sDevId+'_screen" id="'+sTabId+'_'+sDevId+'_screen_down" value="down" /><label for="'+sTabId+'_'+sDevId+'_screen_down">Down</label><input type="radio" name="'+sTabId+'_'+sDevId+'_screen" id="'+sTabId+'_'+sDevId+'_screen_up" value="up" /><label for="'+sTabId+'_'+sDevId+'_screen_up">Up</label></fieldset></div></li>'));
+		if('name' in aValues) {
+			oTab.append($('<li  id="'+sTabId+'_'+sDevId+'" class="screen" data-icon="false">'+aValues['name']+'<div id="'+sTabId+'_'+sDevId+'_screen" class="screen" data-role="fieldcontain" data-type="horizontal"><fieldset data-role="controlgroup" class="controlgroup" data-type="horizontal" data-mini="true"><input type="radio" name="'+sTabId+'_'+sDevId+'_screen" id="'+sTabId+'_'+sDevId+'_screen_down" value="down" /><label for="'+sTabId+'_'+sDevId+'_screen_down">Down</label><input type="radio" name="'+sTabId+'_'+sDevId+'_screen" id="'+sTabId+'_'+sDevId+'_screen_up" value="up" /><label for="'+sTabId+'_'+sDevId+'_screen_up">Up</label></fieldset></div></li>'));
+		}
 		$("div").trigger("create");
 		$('#'+sTabId+'_'+sDevId+'_screen_down').checkboxradio();
 		$('#'+sTabId+'_'+sDevId+'_screen_up').checkboxradio();
@@ -184,30 +191,38 @@ function createScreenElement(sTabId, sDevId, aValues) {
 			}
 		});
 	}
-	if(aValues['state'] == "up") {
-		$('#'+sTabId+'_'+sDevId+'_screen_up').attr("checked","checked")
-		$('#'+sTabId+'_'+sDevId+'_screen_up').checkboxradio("refresh");
-	} else {
-		$('#'+sTabId+'_'+sDevId+'_screen_down').attr("checked","checked")
-		$('#'+sTabId+'_'+sDevId+'_screen_down').checkboxradio("refresh");
+	if('state' in aValues) {
+		if(aValues['state'] == "up") {
+			$('#'+sTabId+'_'+sDevId+'_screen_up').attr("checked","checked")
+			$('#'+sTabId+'_'+sDevId+'_screen_up').checkboxradio("refresh");
+		} else {
+			$('#'+sTabId+'_'+sDevId+'_screen_down').attr("checked","checked")
+			$('#'+sTabId+'_'+sDevId+'_screen_down').checkboxradio("refresh");
+		}
 	}
 	oTab.listview();
 	oTab.listview("refresh");
-	if(aValues['settings']['readonly']) {
+	if('gui-readonly' in aValues && aValues['gui-readonly']) {
 		$('#'+sTabId+'_'+sDevId+'_screen_up').checkboxradio('disable');
 		$('#'+sTabId+'_'+sDevId+'_screen_down').checkboxradio('disable');
 	}
 }
 
 function createDimmerElement(sTabId, sDevId, aValues) {
-	iOldDimLevel = aValues['dimlevel'];
+	if('dimlevel' in aValues) {
+		iOldDimLevel = aValues['dimlevel'];
+	} else {
+		iOldDimLevel = 0;
+	}
 	if($('#'+sTabId+'_'+sDevId+'_switch').length == 0) {
 		if(bShowTabs) {
 			oTab = $('#'+sTabId).find('ul');
 		} else {
 			oTab = $('#all');
 		}
-		oTab.append($('<li id="'+sTabId+'_'+sDevId+'" class="dimmer" data-icon="false">'+aValues['name']+'<select id="'+sTabId+'_'+sDevId+'_switch" data-role="slider"><option value="off">Off</option><option value="on">On</option></select><div id="'+sTabId+'_'+sDevId+'_dimmer" min="'+aValues['settings']['min']+'" max="'+aValues['settings']['max']+'" data-highlight="true" ><input type="value" id="'+sTabId+'_'+sDevId+'_value" class="slider-value dimmer-slider ui-slider-input ui-input-text ui-body-c ui-corner-all ui-shadow-inset" /></div></li>'));
+		if('name' in aValues && 'dimlevel-minimum' in aValues && 'dimlevel-maximum' in aValues) {
+			oTab.append($('<li id="'+sTabId+'_'+sDevId+'" class="dimmer" data-icon="false">'+aValues['name']+'<select id="'+sTabId+'_'+sDevId+'_switch" data-role="slider"><option value="off">Off</option><option value="on">On</option></select><div id="'+sTabId+'_'+sDevId+'_dimmer" min="'+aValues['dimlevel-minimum']+'" max="'+aValues['dimlevel-maximum']+'" data-highlight="true" ><input type="value" id="'+sTabId+'_'+sDevId+'_value" class="slider-value dimmer-slider ui-slider-input ui-input-text ui-body-c ui-corner-all ui-shadow-inset" /></div></li>'));
+		}
 		$('#'+sTabId+'_'+sDevId+'_switch').slider();
 		$('#'+sTabId+'_'+sDevId+'_switch').bind("change", function(event, ui) {
 			event.stopPropagation();
@@ -247,58 +262,123 @@ function createDimmerElement(sTabId, sDevId, aValues) {
 	}
 	$('#'+sTabId+'_'+sDevId+'_dimmer').val(iOldDimLevel);
 	$('#'+sTabId+'_'+sDevId+'_dimmer').slider('refresh');
-	if(aValues['state'] == "on") {
-		$('#'+sTabId+'_'+sDevId+'_switch')[0].selectedIndex = 1;
-		$('#'+sTabId+'_'+sDevId+'_switch').slider('refresh');
-	} else {
-		$('#'+sTabId+'_'+sDevId+'_switch')[0].selectedIndex = 0;
-		$('#'+sTabId+'_'+sDevId+'_switch').slider('refresh');
+	if('state' in aValues) {
+		if(aValues['state'] == "on") {
+			$('#'+sTabId+'_'+sDevId+'_switch')[0].selectedIndex = 1;
+			$('#'+sTabId+'_'+sDevId+'_switch').slider('refresh');
+		} else {
+			$('#'+sTabId+'_'+sDevId+'_switch')[0].selectedIndex = 0;
+			$('#'+sTabId+'_'+sDevId+'_switch').slider('refresh');
+		}
 	}
-	if(aValues['settings']['readonly']) {
+	if('gui-readonly' in aValues && aValues['gui-readonly']) {
 		$('#'+sTabId+'_'+sDevId+'_switch').slider('disable');
 		$('#'+sTabId+'_'+sDevId+'_dimmer').slider('disable');
 	}
 }
 
 function createWeatherElement(sTabId, sDevId, aValues) {
-	aDecimals[sTabId+'_'+sDevId] = aValues['settings']['decimals'];
-	aValues['temperature'] /= Math.pow(10, aValues['settings']['decimals']).toFixed(aValues['settings']['decimals']);
-	aValues['humidity'] /= Math.pow(10, aValues['settings']['decimals']).toFixed(aValues['settings']['decimals']);
+	aDecimals[sTabId+'_'+sDevId] = new Array();
+	if('gui-decimals' in aValues) {
+		aDecimals[sTabId+'_'+sDevId]['gui'] = aValues['gui-decimals'];
+	} else {
+		aDecimals[sTabId+'_'+sDevId]['gui'] = 0;
+	}
+	if('device-decimals' in aValues) {
+		aDecimals[sTabId+'_'+sDevId]['device'] = aValues['device-decimals'];
+	} else {
+		aDecimals[sTabId+'_'+sDevId]['device'] = 0;
+	}
+	if('temperature' in aValues) {
+		aValues['temperature'] /= Math.pow(10, aValues['device-decimals']);
+	}
+	if('humidity' in aValues) {
+		aValues['humidity'] /= Math.pow(10, aValues['device-decimals']);
+	}
+	if('sunrise' in aValues) {
+		aValues['sunrise'] /= Math.pow(10, aValues['device-decimals']);
+	}
+	if('sunset' in aValues) {
+		aValues['sunset'] /= Math.pow(10, aValues['device-decimals']);
+	}
+
 	if($('#'+sTabId+'_'+sDevId+'_weather').length == 0) {
 		if(bShowTabs) {
 			oTab = $('#'+sTabId).find('ul');
 		} else {
 			oTab = $('#all');
 		}
-		oTab.append($('<li class="weather" id="'+sTabId+'_'+sDevId+'_weather" data-icon="false">'+aValues['name']+'</li>'));
-		if(aValues['settings']['battery']) {
+		if('name' in aValues) {
+			oTab.append($('<li class="weather" id="'+sTabId+'_'+sDevId+'_weather" data-icon="false">'+aValues['name']+'</li>'));
+		}
+		if('gui-show-battery' in aValues && aValues['gui-show-battery']) {
 			oTab.find('#'+sTabId+'_'+sDevId+'_weather').append($('<div id="'+sTabId+'_'+sDevId+'_batt" class="battery"></div>'));
-			if(aValues['battery']) {
-				$('#'+sTabId+'_'+sDevId+'_batt').addClass('green');
-			} else {
-				$('#'+sTabId+'_'+sDevId+'_batt').addClass('red');
+			if('battery' in aValues) {
+				if(aValues['battery']) {
+					$('#'+sTabId+'_'+sDevId+'_batt').addClass('green');
+				} else {
+					$('#'+sTabId+'_'+sDevId+'_batt').addClass('red');
+				}
 			}
 		}
-		if(aValues['settings']['humidity']) {
-			oTab.find('#'+sTabId+'_'+sDevId+'_weather').append($('<div class="percentage">%</div><div class="humidity" id="'+sTabId+'_'+sDevId+'_humi">'+aValues['humidity']+'</div>'));
+		if('gui-show-humidity' in aValues && aValues['gui-show-humidity'] && 'humidity' in aValues) {
+			oTab.find('#'+sTabId+'_'+sDevId+'_weather').append($('<div class="humidity_icon"></div><div class="humidity" id="'+sTabId+'_'+sDevId+'_humi">'+aValues['humidity'].toFixed(aValues['gui-decimals'])+'</div>'));
 		}
-		if(aValues['settings']['temperature']) {
-			oTab.find('#'+sTabId+'_'+sDevId+'_weather').append($('<div class="degrees">o</div><div class="temperature" id="'+sTabId+'_'+sDevId+'_temp">'+aValues['temperature']+'</div>'));
+		if('gui-show-temperature' in aValues && aValues['gui-show-temperature'] && 'temperature' in aValues) {
+			oTab.find('#'+sTabId+'_'+sDevId+'_weather').append($('<div class="temperature_icon"></div><div class="temperature" id="'+sTabId+'_'+sDevId+'_temp">'+aValues['temperature'].toFixed(aValues['gui-decimals'])+'</div>'));
+		}
+		if('gui-show-sunriseset' in aValues && aValues['gui-show-sunriseset'] && 'sunrise' in aValues && 'sunset' in aValues) {
+			oTab.find('#'+sTabId+'_'+sDevId+'_weather').append($('<div id="'+sTabId+'_'+sDevId+'_sunset_icon" class="sunset_icon"></div><div class="sunset" id="'+sTabId+'_'+sDevId+'_sunset">'+aValues['sunset'].toFixed(aValues['gui-decimals'])+'</div>'));
+			oTab.find('#'+sTabId+'_'+sDevId+'_weather').append($('<div id="'+sTabId+'_'+sDevId+'_sunrise_icon" class="sunrise_icon"></div><div class="sunrise" id="'+sTabId+'_'+sDevId+'_sunrise">'+aValues['sunrise'].toFixed(aValues['gui-decimals'])+'</div>'));
+			if('sun' in aValues) {
+				if(aValues['sun'] == 'rise') {
+					$('#'+sTabId+'_'+sDevId+'_sunrise_icon').addClass('yellow');
+					$('#'+sTabId+'_'+sDevId+'_sunset_icon').addClass('gray');
+				} else {
+					$('#'+sTabId+'_'+sDevId+'_sunrise_icon').addClass('gray');
+					$('#'+sTabId+'_'+sDevId+'_sunset_icon').addClass('blue');
+				}
+			}
 		}
 	} else {
-		if(aValues['settings']['battery']) {
+		if('gui-show-battery' in aValues && aValues['gui-show-battery']) {
 			if(aValues['battery']) {
-				$('#'+sTabId+'_'+sDevId+'_batt').removeClass('red').addClass('green');
+				if($('#'+lindex+'_'+dvalues+'_batt').attr("class").indexOf("green") == -1) {
+					$('#'+sTabId+'_'+sDevId+'_batt').removeClass('red').addClass('green');
+				}
 			} else {
-				$('#'+sTabId+'_'+sDevId+'_batt').removeClass('green').addClass('red');
+				if($('#'+lindex+'_'+dvalues+'_batt').attr("class").indexOf("red") == -1) {
+					$('#'+sTabId+'_'+sDevId+'_batt').removeClass('green').addClass('red');
+				}
 			}
 		}
-		if(aValues['settings']['humidity']) {
-			$('#'+sTabId+'_'+sDevId+'_humi').text(aValues['humidity']);
+		if('sun' in aValues) {
+			if(aValues['sun'] == 'rise') {
+				if($('#'+sTabId+'_'+sDevId+'_sunrise_icon').attr("class").indexOf("yellow") == -1) {
+					$('#'+sTabId+'_'+sDevId+'_sunrise_icon').removeClass('gray').addClass('yellow');
+				}
+				if($('#'+sTabId+'_'+sDevId+'_sunrise_icon').attr("class").indexOf("gray") == -1) {
+					$('#'+sTabId+'_'+sDevId+'_sunset_icon').removeClass('blue').addClass('gray');
+				}
+			} else {
+				if($('#'+sTabId+'_'+sDevId+'_sunrise_icon').attr("class").indexOf("gray") == -1) {
+					$('#'+sTabId+'_'+sDevId+'_sunrise_icon').removeClass('yellow').addClass('gray');
+				}
+				if($('#'+sTabId+'_'+sDevId+'_sunrise_icon').attr("class").indexOf("blue") == -1) {
+					$('#'+sTabId+'_'+sDevId+'_sunset_icon').removeClass('gray').addClass('blue');
+				}
+			}
 		}
-		if(aValues['settings']['temperature']) {
-			$('#'+sTabId+'_'+sDevId+'_temp').text(aValues['temperature']);
+		if('gui-show-humidity' in aValues && aValues['gui-show-humidity'] && 'humidity' in aValues) {
+			$('#'+sTabId+'_'+sDevId+'_humi').text(aValues['humidity'].toFixed(aValues['gui-decimals']));
 		}
+		if('gui-show-temperature' in aValues && aValues['gui-show-temperature'] && 'temperature' in aValues) {
+			$('#'+sTabId+'_'+sDevId+'_temp').text(aValues['temperature'].toFixed(aValues['gui-decimals']));
+		}
+		if('gui-show-sunriseset' in aValues && aValues['gui-show-sunriseset'] && 'sunrise' in aValues && 'sunset' in aValues) {
+			$('#'+sTabId+'_'+sDevId+'_sunrise').text(aValues['sunrise'].toFixed(aValues['gui-decimals']));
+			$('#'+sTabId+'_'+sDevId+'_sunset').text(aValues['sunset'].toFixed(aValues['gui-decimals']));
+		}		
 	}
 	oTab.listview();
 	oTab.listview("refresh");
@@ -327,7 +407,7 @@ function createGUI(data) {
 			iPLVersion = locations[0];
 			iPLNVersion = locations[1];
 			updateVersions();
-		} else if(root == "firmware") {
+		} else if(root == 'firmware' && 'version' in locations) {
 			iFWVersion = locations["version"];
 			if(iFWVersion > 0) {
 				updateVersions();
@@ -384,7 +464,8 @@ function createGUI(data) {
 						}
 					}
 				});
-			});
+			});				
+			
 			if(bShowTabs) {
 				$(document).delegate('[data-role="navbar"] a', 'click', function(e) {
 					var iPos = this.href.indexOf('#');
@@ -450,16 +531,58 @@ function parseData(data) {
 						}
 					} else if(iType == 3) {
 						if(vindex == 'temperature' && $('#'+lindex+'_'+dvalues+'_temp')) {
-							vvalues /= Math.pow(10, aDecimals[lindex+'_'+dvalues]).toFixed(aDecimals[lindex+'_'+dvalues]);
-							$('#'+lindex+'_'+dvalues+'_temp').text(vvalues);
+							if(lindex+'_'+dvalues in aDecimals
+							&& 'device' in aDecimals[lindex+'_'+dvalues]
+							&& 'gui' in aDecimals[lindex+'_'+dvalues]) {
+								vvalues /= Math.pow(10, aDecimals[lindex+'_'+dvalues]['device']);
+								$('#'+lindex+'_'+dvalues+'_temp').text(vvalues.toFixed(aDecimals[lindex+'_'+dvalues]['gui']));
+							}
 						} else if(vindex == 'humidity' && $('#'+lindex+'_'+dvalues+'_humi')) {
-							vvalues /= Math.pow(10, aDecimals[lindex+'_'+dvalues]).toFixed(aDecimals[lindex+'_'+dvalues]);
-							$('#'+lindex+'_'+dvalues+'_humi').text(vvalues);
+							if(lindex+'_'+dvalues in aDecimals
+							&& 'device' in aDecimals[lindex+'_'+dvalues]
+							&& 'gui' in aDecimals[lindex+'_'+dvalues]) {
+								vvalues /= Math.pow(10, aDecimals[lindex+'_'+dvalues]['device']);
+								$('#'+lindex+'_'+dvalues+'_humi').text(vvalues.toFixed(aDecimals[lindex+'_'+dvalues]['gui']));
+							}
+						} else if(vindex == 'sunrise' && $('#'+lindex+'_'+dvalues+'_sunrise')) {
+							if(lindex+'_'+dvalues in aDecimals
+							&& 'device' in aDecimals[lindex+'_'+dvalues]
+							&& 'gui' in aDecimals[lindex+'_'+dvalues]) {
+								vvalues /= Math.pow(10, aDecimals[lindex+'_'+dvalues]['device']);
+								$('#'+lindex+'_'+dvalues+'_sunrise').text(vvalues.toFixed(aDecimals[lindex+'_'+dvalues]['gui']));
+							}
+						} else if(vindex == 'sunset' && $('#'+lindex+'_'+dvalues+'_sunset')) {
+							if(lindex+'_'+dvalues in aDecimals
+							&& 'device' in aDecimals[lindex+'_'+dvalues]
+							&& 'gui' in aDecimals[lindex+'_'+dvalues]) {
+								vvalues /= Math.pow(10, aDecimals[lindex+'_'+dvalues]['device']);
+								$('#'+lindex+'_'+dvalues+'_sunset').text(vvalues.toFixed(aDecimals[lindex+'_'+dvalues]['gui']));
+							}
 						} else if(vindex == 'battery' && $('#'+lindex+'_'+dvalues+'_batt')) {
 							if(vvalues == 1) {
-								$('#'+lindex+'_'+dvalues+'_batt').removeClass('red').addClass('green');
+								if($('#'+lindex+'_'+dvalues+'_batt').attr("class").indexOf("green") == -1) {
+									$('#'+lindex+'_'+dvalues+'_batt').removeClass('red').addClass('green');
+								}
 							} else {
-								$('#'+lindex+'_'+dvalues+'_batt').removeClass('green').addClass('red');
+								if($('#'+lindex+'_'+dvalues+'_batt').attr("class").indexOf("red") == -1) {
+									$('#'+lindex+'_'+dvalues+'_batt').removeClass('green').addClass('red');
+								}
+							}
+						} else if(vindex == 'sun' && $('#'+lindex+'_'+dvalues+'_sunrise_icon') && $('#'+lindex+'_'+dvalues+'_sunset_icon')) {
+							if(vvalues == 'rise') {
+								if($('#'+sTabId+'_'+sDevId+'_sunrise_icon').attr("class").indexOf("yellow") == -1) {
+									$('#'+lindex+'_'+dvalues+'_sunrise_icon').removeClass('gray').addClass('yellow');
+								}
+								if($('#'+sTabId+'_'+sDevId+'_sunset_icon').attr("class").indexOf("gray") == -1) {
+									$('#'+lindex+'_'+dvalues+'_sunset_icon').removeClass('blue').addClass('gray');
+								}
+							} else {
+								if($('#'+sTabId+'_'+sDevId+'_sunrise_icon').attr("class").indexOf("gray") == -1) {
+									$('#'+lindex+'_'+dvalues+'_sunrise_icon').removeClass('yellow').addClass('gray');
+								}
+								if($('#'+sTabId+'_'+sDevId+'_sunset_icon').attr("class").indexOf("blue") == -1) {
+									$('#'+lindex+'_'+dvalues+'_sunset_icon').removeClass('gray').addClass('blue');
+								}
 							}
 						}
 					}
@@ -472,11 +595,12 @@ function parseData(data) {
 $(document).ready(function() {
 	if($('body').length == 1) {
 		$.mobile.showPageLoadingMsg("b", "Connecting...", true);
-		if(typeof MozWebSocket != "undefined") {
-			oWebsocket = new MozWebSocket("ws://"+location.host, "data");
-		} else if(typeof WebSocket != "undefined") {
+
+		if(!bForceAjax && typeof MozWebSocket != "undefined") {
+			oWebsocket = new MozWebSocket("ws://"+location.host);
+		} else if(!bForceAjax && typeof WebSocket != "undefined") {
 			/* The characters after the trailing slash are needed for a wierd IE 10 bug */
-			oWebsocket = new WebSocket("ws://"+location.host+'/websocket', "data");
+			oWebsocket = new WebSocket("ws://"+location.host+'/websocket');
 		} else {
 			var load = window.setInterval(function() {
 				$.get('http://'+location.host+'/config?'+$.now(), function(txt) {
@@ -498,7 +622,7 @@ $(document).ready(function() {
 			}, 1000);
 		}
 
-		if(oWebsocket) {
+		if(!bForceAjax && oWebsocket) {
 			oWebsocket.onopen = function(evt) {
 				bConnected = true;
 				oWebsocket.send("{\"message\":\"request config\"}");

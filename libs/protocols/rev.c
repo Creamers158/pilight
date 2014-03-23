@@ -62,8 +62,8 @@ void revParseCode(void) {
 		z++;
 	}
 
-	int unit = binToDecRev(rev_switch->binary, 1, 5);
-	int state = rev_switch->binary[10];
+	int unit = binToDecRev(rev_switch->binary, 0, 5);
+	int state = rev_switch->binary[11];
 	int y = binToDecRev(rev_switch->binary, 6, 9);
 	sprintf(&id[0], "%c%d", z, y);
 	
@@ -141,7 +141,7 @@ void revCreateId(char *id) {
 }
 
 void revCreateState(int state) {
-	if(state == 1) {
+	if(state == 0) {
 		revCreateMed(40,43);
 		revCreateHigh(44,47);
 	} else {
@@ -183,7 +183,7 @@ int revCreateCode(JsonNode *code) {
 	} else if(atoi(&id[1]) < 0 || atoi(&id[1]) > 31) {
 		logprintf(LOG_ERR, "rev_switch: invalid id range");
 		return EXIT_FAILURE;
-	} else if(unit > 31 || unit < 0) {
+	} else if(unit > 63 || unit < 0) {
 		logprintf(LOG_ERR, "rev_switch: invalid unit range");
 		return EXIT_FAILURE;
 	} else {
@@ -192,7 +192,7 @@ int revCreateCode(JsonNode *code) {
 		revCreateUnit(unit);
 		revCreateId(id);
 		revCreateState(state);
-		revCreateFooter();;
+		revCreateFooter();
 	}
 	return EXIT_SUCCESS;
 }
@@ -209,21 +209,22 @@ void revInit(void) {
 	protocol_register(&rev_switch);
 	protocol_set_id(rev_switch, "rev_switch");	
 	protocol_device_add(rev_switch, "rev_switch", "REV Switches");
-	protocol_plslen_add(rev_switch, 319); 
-	protocol_plslen_add(rev_switch, 258); 
+	protocol_conflict_add(rev_switch, "clarus_switch");
+	protocol_plslen_add(rev_switch, 319);
+	protocol_plslen_add(rev_switch, 258);
+	protocol_plslen_add(rev_switch, 186);
 	rev_switch->devtype = SWITCH;
 	rev_switch->hwtype = RF433;
 	rev_switch->pulse = 3;
 	rev_switch->rawlen = 50;
 	rev_switch->binlen = 12;
 
-	options_add(&rev_switch->options, 't', "on", no_value, config_state, NULL);
-	options_add(&rev_switch->options, 'f', "off", no_value, config_state, NULL);
-	options_add(&rev_switch->options, 'u', "unit", has_value, config_id,  "^(3[012]?|[012][0-9]|[0-9]{1})$");
-	options_add(&rev_switch->options, 'i', "id", has_value, config_id, "^[ABCDEF](3[012]?|[012][0-9]|[0-9]{1})$");
+	options_add(&rev_switch->options, 't', "on", OPTION_NO_VALUE, CONFIG_STATE, JSON_STRING, NULL, NULL);
+	options_add(&rev_switch->options, 'f', "off", OPTION_NO_VALUE, CONFIG_STATE, JSON_STRING, NULL, NULL);
+	options_add(&rev_switch->options, 'u', "unit", OPTION_HAS_VALUE, CONFIG_ID, JSON_NUMBER, NULL, "^([0-9]|[1-5][0-9]|6[0-3])$");
+	options_add(&rev_switch->options, 'i', "id", OPTION_HAS_VALUE, CONFIG_ID, JSON_STRING, NULL, "^[ABCDEF](3[012]?|[012][0-9]|[0-9]{1})$");
 
-	protocol_setting_add_string(rev_switch, "states", "on,off");
-	protocol_setting_add_number(rev_switch, "readonly", 0);
+	options_add(&rev_switch->options, 0, "gui-readonly", OPTION_HAS_VALUE, CONFIG_SETTING, JSON_NUMBER, (void *)0, "^[10]{1}$");
 	
 	rev_switch->parseCode=&revParseCode;
 	rev_switch->createCode=&revCreateCode;
