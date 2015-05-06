@@ -52,6 +52,7 @@
 #include "libs/pilight/core/pilight.h"
 #include "libs/pilight/core/datetime.h"
 #include "libs/pilight/core/common.h"
+#include "libs/pilight/core/network.h"
 #include "libs/pilight/core/gc.h"
 #include "libs/pilight/core/log.h"
 #include "libs/pilight/core/options.h"
@@ -1534,7 +1535,7 @@ void *receiveOOK(void *param) {
 					r.length = 0;
 				}
 				if(duration > mingaplen) {
-					if(duration < maxgaplen) { // Maximum footer pulse of 100000
+					if(duration < maxgaplen) {
 						plslen = duration/PULSE_DIV;
 					}
 					/* Let's do a little filtering here as well */
@@ -1718,11 +1719,8 @@ void *clientize(void *param) {
 					}
 					json_delete(json);
 				}
-				FREE(array[q]);
 			}
-			if(z > 0) {
-				FREE(array);
-			}
+			array_free(&array, z);
 		}
 	}
 
@@ -2228,10 +2226,7 @@ int start_pilight(int argc, char **argv) {
 			}
 		}
 	}
-	for(x=0;x<nrdevs;x++) {
-		FREE(devs[x]);
-	}
-	FREE(devs);
+	array_free(&devs, nrdevs);
 
 	firmware.version = 0;
 	firmware.lpf = 0;
@@ -2680,7 +2675,7 @@ static LRESULT CALLBACK WindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR cmdline, int show) {
 	pilight.running = 0;
-	
+
 	HWND hWnd;
   WNDCLASS cls;
   MSG msg;

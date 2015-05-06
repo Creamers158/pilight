@@ -62,6 +62,7 @@
 static unsigned short loop = 1;
 static char true_[2];
 static char false_[2];
+static char dot_[2];
 
 static char *recvBuff = NULL;
 static int sockfd = 0;
@@ -105,6 +106,7 @@ int events_gc(void) {
 void event_cache_device(struct rules_t *obj, char *device) {
 	int exists = 0;
 	int o = 0;
+
 	if(obj != NULL) {
 		for(o=0;o<obj->nrdevices;o++) {
 			if(strcmp(obj->devices[o], device) == 0) {
@@ -185,6 +187,9 @@ int event_lookup_variable(char *var, struct rules_t *obj, int type, struct varco
 	if(strcmp(true_, "1") != 0) {
 		strcpy(true_, "1");
 	}
+	if(strcmp(dot_, ".") != 0) {
+		strcpy(dot_, ".");
+	}
 	if(strcmp(false_, "1") != 0) {
 		strcpy(false_, "1");
 	}
@@ -223,17 +228,12 @@ int event_lookup_variable(char *var, struct rules_t *obj, int type, struct varco
 
 	if(nrdots == 1) {
 		char **array = NULL;
-		unsigned int n = explode(var, ".", &array), q = 0;
+		unsigned int n = explode(var, ".", &array);
+
 		if(n < 2) {
-			logprintf(LOG_ERR, "rule #%d: an unexpected error occured", obj->nr, var);
-			varcont->string_ = NULL;
-			varcont->number_ = 0;
-			varcont->decimals_ = 0;
-			for(q=0;q<n;q++) {
-				FREE(array[q]);
-			}
-			FREE(array);
-			return -1;
+			varcont->string_ = dot_;
+			array_free(&array, n);
+			return 0;
 		}
 
 		char device[strlen(array[0])+1];
@@ -242,10 +242,7 @@ int event_lookup_variable(char *var, struct rules_t *obj, int type, struct varco
 		char name[strlen(array[1])+1];
 		strcpy(name, array[1]);
 
-		for(q=0;q<n;q++) {
-			FREE(array[q]);
-		}
-		FREE(array);
+		array_free(&array, n);
 
 		/* Check if the values are not already cached */
 		if(obj != NULL) {
@@ -498,7 +495,7 @@ static int event_remove_hooks(char **rule, struct rules_t *obj, int depth) {
 	return 0;
 }
 
-int event_parse_function(char **rule, struct rules_t *obj, unsigned short validate) {
+static int event_parse_function(char **rule, struct rules_t *obj, unsigned short validate, enum origin_t origin) {
 	struct JsonNode *arguments = NULL;
 	struct event_functions_t *tmp_function = event_functions;
 	char *tmp = *rule, *ca = NULL;
@@ -576,7 +573,7 @@ int event_parse_function(char **rule, struct rules_t *obj, unsigned short valida
 					subfunction[len-1] = '\0';
 					strcpy(replace, subfunction);
 
-					if(event_parse_function(&subfunction, obj, validate) > -1) {
+					if(event_parse_function(&subfunction, obj, validate, origin) > -1) {
 						z = strlen(subfunction);
 						/* Remove the nested function and the content within.
 							 Replace this function with the result of the function.
@@ -663,7 +660,7 @@ int event_parse_function(char **rule, struct rules_t *obj, unsigned short valida
 		if(error == 0) {
 			if(strcmp(name, tmp_function->name) == 0) {
 				if(tmp_function->run != NULL) {
-					error = tmp_function->run(obj, arguments, &output);
+					error = tmp_function->run(obj, arguments, &output, origin);
 					match = 1;
 					break;
 				}
@@ -715,7 +712,7 @@ static int event_parse_formula(char **rule, struct rules_t *obj, int depth, unsi
 	   e.g.: 1 AND 1 AND 0 AND 1
 			 1 AND location.device.state IS on
 	*/
-	if(event_parse_function(&tmp, obj, validate) == -1) {
+	if(event_parse_function(&tmp, obj, validate, RULE) == -1) {
 		return -1;
 	}
 
@@ -894,18 +891,103 @@ close:
 	return error;
 }
 
+static int event_parse_action_arguments(char *arguments, struct rules_t *obj, int validate) {
+	struct varcont_t v;
+	char *tmp = NULL;
+	int i = 0, error = 0, a = 0, b = 0, len = strlen(arguments);
+	int vallen = 0, ret = 0, nlen = 0;
+
+	while(arguments[i] != '\0' && i < len) {
+		if(arguments[i] == '(') {
+			if(!(arguments[i-1] == '(' || arguments[i-1] == ' ' || i == 0)) {
+				/* Function */
+				error = event_parse_function(&arguments, obj, validate, ACTION);
+				int z = strlen(arguments);
+				len -= (len-z);
+			}
+		}
+		if(arguments[i] == '.') {
+			a = i;
+			b = i;
+			while(a > 0 && arguments[a-1] != ' ') {
+				a--;
+			}
+			while(b < len && arguments[b] != ' ') {
+				b++;
+			}
+			if(a < b) {
+				if((tmp = REALLOC(tmp, (b-a)+1)) == NULL) {
+					logprintf(LOG_ERR, "out of memory");
+					exit(EXIT_FAILURE);
+				}
+				strncpy(tmp, &arguments[a], (b-a));
+				tmp[(b-a)] = '\0';
+
+				ret = event_lookup_variable(tmp, obj, JSON_STRING | JSON_NUMBER, &v, validate, ACTION);
+				if(ret == 0) {
+					if(v.string_ == NULL) {
+						vallen = snprintf(NULL, 0, "%.*f", v.decimals_, v.number_);
+					} else {
+						vallen = strlen(v.string_);
+					}
+					/*
+					 * We need to store larger values then we have space for
+					 */
+					nlen = (len-(b-a))+vallen;
+					if(len < nlen) {
+						if((arguments = REALLOC(arguments, nlen)) == NULL) {
+							logprintf(LOG_ERR, "out of memory");
+							exit(EXIT_FAILURE);
+						}
+					}
+					memmove(&arguments[a+vallen], &arguments[b], nlen-(a+vallen));
+
+					if(v.string_ == NULL) {
+						snprintf(&arguments[a], vallen+1, "%.*f", v.decimals_, v.number_);
+					} else {
+						snprintf(&arguments[a], vallen+1, "%s", v.string_);
+					}
+
+					i = a+vallen;
+					len = nlen;
+
+
+					/*
+					 * snprintf adds an unwanted null terminator
+					 * that we need to remove.
+					 */
+					arguments[a+vallen] = ' ';
+					arguments[len] = '\0';
+				} else if(ret == -1) {
+					error = -1;
+					break;
+				}
+			}
+		}
+		if(error == -1) {
+			break;
+		}
+		i++;
+	}
+	if(tmp != NULL) {
+		FREE(tmp);
+	}
+	return error;
+}
+
 static int event_parse_action(char *action, struct rules_t *obj, int validate) {
 	logprintf(LOG_STACK, "%s(...)", __FUNCTION__);
 	struct JsonNode *jchild = NULL;
 	struct JsonNode *jchild1 = NULL;
+	struct JsonNode *jvalue = NULL;
 	struct options_t *opt = NULL;
 	struct event_actions_t *tmp_actions = NULL;
 	struct rules_actions_t *node = NULL;
-	char *tmp = action, *search = NULL;
+	char *tmp = action, *search = NULL, *output = NULL;
 	char *p = NULL, *name = NULL, *value = NULL, **array = NULL, *func = NULL;
 	unsigned long len = strlen(tmp), pos = 0, pos1 = 0, offset = 0;
 	int error = 0, order = 1, l = 0, i = 0, x = 0, nractions = 1, match = 0;
-	
+
 	while(pos < len) {
 		if(strncmp(&tmp[pos], " AND ", 5) == 0) {
 			l = explode(&tmp[pos+5], " ", &array);
@@ -921,12 +1003,7 @@ static int event_parse_action(char *action, struct rules_t *obj, int validate) {
 					tmp_actions = tmp_actions->next;
 				}
 			}
-			if(l > 0) {
-				for(i=0;i<l;i++) {
-					FREE(array[i]);
-				}
-				FREE(array);
-			}
+			array_free(&array, l);
 			if(match == 1) {
 				memmove(&tmp[pos], &tmp[pos+4], len-pos-4);
 				tmp[pos] = '\0';
@@ -936,11 +1013,10 @@ static int event_parse_action(char *action, struct rules_t *obj, int validate) {
 		}
 		pos++;
 	}
-	
+
 	pos = 0;
 	len = 0;
 	for(x=0;x<nractions;x++) {
-
 		match = 0;
 		node = obj->actions;
 		while(node) {
@@ -959,6 +1035,7 @@ static int event_parse_action(char *action, struct rules_t *obj, int validate) {
 			node->nr = x;
 			node->rule = obj;
 			node->arguments = NULL;
+			node->parsedargs = NULL;
 			node->next = obj->actions;
 			obj->actions = node;
 		}
@@ -1031,12 +1108,7 @@ static int event_parse_action(char *action, struct rules_t *obj, int validate) {
 											json_append_element(jvalues, json_mkstring(array[i]));
 										}
 									}
-									if(l > 0) {
-										for(i=0;i<l;i++) {
-											FREE(array[i]);
-										}
-										FREE(array);
-									}
+									array_free(&array, l);
 								} else {
 									if(isNumeric(value) == 0) {
 										json_append_element(jvalues, json_mknumber(atof(value), 0));
@@ -1049,7 +1121,7 @@ static int event_parse_action(char *action, struct rules_t *obj, int validate) {
 								json_append_member(node->arguments, name, jobj);
 								order++;
 							}
-							memset(value, '\0', strlen(value));							
+							memset(value, '\0', strlen(value));
 
 							name = opt->name;
 						}
@@ -1085,12 +1157,7 @@ static int event_parse_action(char *action, struct rules_t *obj, int validate) {
 							json_append_element(jvalues, json_mkstring(array[i]));
 						}
 					}
-					if(l > 0) {
-						for(i=0;i<l;i++) {
-							FREE(array[i]);
-						}
-						FREE(array);
-					}
+					array_free(&array, l);
 				} else {
 					if(isNumeric(value) == 0) {
 						json_append_element(jvalues, json_mknumber(atof(value), 0));
@@ -1105,99 +1172,165 @@ static int event_parse_action(char *action, struct rules_t *obj, int validate) {
 			}
 			memset(value, '\0', strlen(value));
 			offset = len;
-
 			if(error == 0) {
-				struct options_t *opt = node->action->options;
-				struct JsonNode *joption = NULL;
-				struct JsonNode *jvalue = NULL;
-				struct JsonNode *jchild = NULL;
-				while(opt) {
-					if((joption = json_find_member(node->arguments, opt->name)) == NULL) {
-						if(opt->conftype == DEVICES_VALUE && opt->argtype == OPTION_HAS_VALUE) {
-							logprintf(LOG_ERR, "action \"%s\" is missing option \"%s\"", node->action->name, opt->name);
-							error = 1;
-							break;
-						}
-					} else {
-						if((jvalue = json_find_member(joption, "value")) != NULL) {
-							if(jvalue->tag == JSON_ARRAY) {
-								jchild = json_first_child(jvalue);
-								while(jchild) {
-									if(opt->vartype != (JSON_NUMBER | JSON_STRING)) {
-										if(jchild->tag != JSON_NUMBER && opt->vartype == JSON_NUMBER) {
-											logprintf(LOG_ERR, "action \"%s\" option \"%s\" only accepts numbers", node->action->name, opt->name);
-											error = 1;
-											break;
-										}
-										if(jchild->tag != JSON_STRING && opt->vartype == JSON_STRING) {
-											logprintf(LOG_ERR, "action \"%s\" option \"%s\" only accepts strings", node->action->name, opt->name);
-											error = 1;
-											break;
-										}
+				output = json_stringify(node->arguments, NULL);
+				if(node->parsedargs != NULL) {
+					json_delete(node->parsedargs);
+					node->parsedargs = NULL;
+				}
+				node->parsedargs = json_decode(output);
+				jchild = json_first_child(node->parsedargs);
+				while(jchild) {
+					if((jvalue = json_find_member(jchild, "value")) != NULL) {
+						jchild1 = json_first_child(jvalue);
+						while(jchild1) {
+							if(jchild1->tag == JSON_STRING) {
+								if((error = event_parse_action_arguments(jchild1->string_, obj, validate)) == 0) {
+									if(isNumeric(jchild1->string_) == 0) {
+										int dec = nrDecimals(jchild1->string_);
+										int nr = atof(jchild1->string_);
+										json_free(jchild1->string_);
+										jchild1->tag = JSON_NUMBER;
+										jchild1->number_ = nr;
+										jchild1->decimals_ = dec;
 									}
-									jchild = jchild->next;
+								} else {
+									break;
 								}
 							}
+							jchild1 = jchild1->next;
 						}
-					}
-					opt = opt->next;
-				}
-			}
-			if(error == 0) {
-				jchild = json_first_child(node->arguments);
-				while(jchild) {
-					jchild1 = json_first_child(node->arguments);
-					match = 0;
-					while(jchild1) {
-						if(strcmp(jchild->key, jchild1->key) == 0) {
-							match++;
-						}
-						jchild1 = jchild1->next;
-					}
-					if(match > 1) {
-						logprintf(LOG_ERR, "action \"%s\" has duplicate \"%s\" arguments", node->action->name, jchild->key);
-						error = 1;
-						break;
-					}
-					match = 0;
-					opt = node->action->options;
-					while(opt) {
-						if(strcmp(jchild->key, opt->name) == 0) {
-							match = 1;
-							break;
-						}
-						opt = opt->next;
-					}
-					if(match == 0) {
-						logprintf(LOG_ERR, "action \"%s\" doesn't accept option \"%s\"", node->action->name, jchild->key);
-						error = 1;
-						break;
 					}
 					jchild = jchild->next;
 				}
+				if(error == 0) {
+					struct options_t *opt = node->action->options;
+					struct JsonNode *joption = NULL;
+					struct JsonNode *jchild = NULL;
+					while(opt) {
+						if((joption = json_find_member(node->parsedargs, opt->name)) == NULL) {
+							if(opt->conftype == DEVICES_VALUE && opt->argtype == OPTION_HAS_VALUE) {
+								logprintf(LOG_ERR, "action \"%s\" is missing option \"%s\"", node->action->name, opt->name);
+								error = 1;
+								break;
+							}
+						} else {
+							if((jvalue = json_find_member(joption, "value")) != NULL) {
+								if(jvalue->tag == JSON_ARRAY) {
+									jchild = json_first_child(jvalue);
+									while(jchild) {
+										if(opt->vartype != (JSON_NUMBER | JSON_STRING)) {
+											if(jchild->tag != JSON_NUMBER && opt->vartype == JSON_NUMBER) {
+												logprintf(LOG_ERR, "action \"%s\" option \"%s\" only accepts numbers", node->action->name, opt->name);
+												error = 1;
+												break;
+											}
+											if(jchild->tag != JSON_STRING && opt->vartype == JSON_STRING) {
+												logprintf(LOG_ERR, "action \"%s\" option \"%s\" only accepts strings", node->action->name, opt->name);
+												error = 1;
+												break;
+											}
+										}
+										jchild = jchild->next;
+									}
+								}
+							}
+						}
+						opt = opt->next;
+					}
+					if(error == 0) {
+						jchild = json_first_child(node->parsedargs);
+						while(jchild) {
+							jchild1 = json_first_child(node->parsedargs);
+							match = 0;
+							while(jchild1) {
+								if(strcmp(jchild->key, jchild1->key) == 0) {
+									match++;
+								}
+								jchild1 = jchild1->next;
+							}
+							if(match > 1) {
+								logprintf(LOG_ERR, "action \"%s\" has duplicate \"%s\" arguments", node->action->name, jchild->key);
+								error = 1;
+								break;
+							}
+							match = 0;
+							opt = node->action->options;
+							while(opt) {
+								if(strcmp(jchild->key, opt->name) == 0) {
+									match = 1;
+									break;
+								}
+								opt = opt->next;
+							}
+							if(match == 0) {
+								logprintf(LOG_ERR, "action \"%s\" doesn't accept option \"%s\"", node->action->name, jchild->key);
+								error = 1;
+								break;
+							}
+							jchild = jchild->next;
+						}
+					}
+				}
+				json_free(output);
 			}
 
 			if(error != 0) {
 				break;
 			}
+		} else {
+			offset += strlen(&tmp[offset])+1;
 		}
 		if(error != 0) {
 			break;
-		}
-		if(error == 0) {
-			if(validate == 1) {
-				if(node->action != NULL) {
-					if(node->action->checkArguments != NULL) {
-						error = node->action->checkArguments(node);
+		} else {
+			output = json_stringify(node->arguments, NULL);
+			if(node->parsedargs != NULL) {
+				json_delete(node->parsedargs);
+				node->parsedargs = NULL;
+			}
+			node->parsedargs = json_decode(output);
+			jchild = json_first_child(node->parsedargs);
+			while(jchild) {
+				if((jvalue = json_find_member(jchild, "value")) != NULL) {
+					jchild1 = json_first_child(jvalue);
+					while(jchild1) {
+						if(jchild1->tag == JSON_STRING) {
+							if((error = event_parse_action_arguments(jchild1->string_, obj, validate)) == 0) {
+								if(isNumeric(jchild1->string_) == 0) {
+									int dec = nrDecimals(jchild1->string_);
+									int nr = atof(jchild1->string_);
+									json_free(jchild1->string_);
+									jchild1->tag = JSON_NUMBER;
+									jchild1->number_ = nr;
+									jchild1->decimals_ = dec;
+								}
+							} else {
+								break;
+							}
+						}
+						jchild1 = jchild1->next;
 					}
 				}
-			} else {
-				if(node->action != NULL) {
-					if(node->action->run != NULL) {
-						error = node->action->run(node);
+				jchild = jchild->next;
+			}
+
+			if(error == 0) {
+				if(validate == 1) {
+					if(node->action != NULL) {
+						if(node->action->checkArguments != NULL) {
+							error = node->action->checkArguments(node);
+						}
+					}
+				} else {
+					if(node->action != NULL) {
+						if(node->action->run != NULL) {
+							error = node->action->run(node);
+						}
 					}
 				}
 			}
+			json_free(output);
 		}
 		if(error != 0) {
 			break;
@@ -1219,7 +1352,7 @@ int event_parse_condition(char **rule, struct rules_t *obj, int depth, unsigned 
 	char *or = strstr(tmp, "OR");
 	char *subrule = NULL;
 	size_t pos = 0;
-	int	type = 0, error = 0, i = 0, nrspaces = 0, hasquote = 0;
+	int	type = 0, error = 0/*, i = 0, nrspaces = 0, hasquote = 0*/;
 
 	if(or == NULL) {
 		type = AND;
@@ -1243,22 +1376,22 @@ int event_parse_condition(char **rule, struct rules_t *obj, int depth, unsigned 
 
 	strncpy(subrule, tmp, pos);
 	subrule[pos-1] = '\0';
-	for(i=0;i<pos;i++) {
-		if(subrule[i] == '"') {
-			hasquote ^= 1;
-		}
-		if(hasquote == 0 && (subrule[i] == ' ')) {
-			nrspaces++;
-		}
-	}
+	// for(i=0;i<pos;i++) {
+		// if(subrule[i] == '"') {
+			// hasquote ^= 1;
+		// }
+		// if(hasquote == 0 && (subrule[i] == ' ')) {
+			// nrspaces++;
+		// }
+	// }
 	/*
 	 * Only "1", "0", "True", "False" or
 	 * "1 == 1", "datetime.hour < 18.00" is valid here.
 	 */
-	if(nrspaces != 2 && nrspaces != 0) {
-		logprintf(LOG_ERR, "rule #%d invalid: could not parse \"%s\"", obj->nr, subrule);
-		error = -1;
-	} else {
+	// if(nrspaces != 2 && nrspaces != 0) {
+		// logprintf(LOG_ERR, "rule #%d invalid: could not parse \"%s\"", obj->nr, subrule);
+		// error = -1;
+	// } else {
 		if(event_parse_formula(&subrule, obj, depth, validate) == -1) {
 			error = -1;
 		} else {
@@ -1272,7 +1405,7 @@ int event_parse_condition(char **rule, struct rules_t *obj, int depth, unsigned 
 			tmp[len-pos] = '\0';
 			error = atoi(subrule);
 		}
-	}
+	// }
 	FREE(subrule);
 	return error;
 }
@@ -1363,7 +1496,7 @@ int event_parse_rule(char *rule, struct rules_t *obj, int depth, unsigned short 
 				}
 			/* Function */
 			} else {
-				error = event_parse_function(&condition, obj, validate);
+				error = event_parse_function(&condition, obj, validate, RULE);
 			}
 		}
 		if((type_and = strncmp(&condition[i], " AND ", 5)) == 0 || (type_or = strncmp(&condition[i], " OR ", 4)) == 0) {
@@ -1462,7 +1595,6 @@ void *events_loop(void *param) {
 	struct devices_t *dev = NULL;
 	struct JsonNode *jdevices = NULL, *jchilds = NULL;
 	struct rules_t *tmp_rules = NULL;
-	struct timeval tv;
 	char *str = NULL;
 	unsigned short match = 0;
 	unsigned int i = 0;
@@ -1494,7 +1626,7 @@ void *events_loop(void *param) {
 								if(jchilds->tag == JSON_STRING &&
 								   strcmp(jchilds->string_, tmp_rules->devices[i]) == 0) {
 									if(devices_get(jchilds->string_, &dev) == 0) {
-										if(dev->lastrule == tmp_rules->nr && 
+										if(dev->lastrule == tmp_rules->nr &&
 											 tmp_rules->nr == dev->prevrule &&
 											 dev->lastrule == dev->prevrule) {
 											logprintf(LOG_ERR, "skipped rule #%d because of an infinite loop triggered by device %s", tmp_rules->nr, jchilds->string_);
@@ -1518,10 +1650,10 @@ void *events_loop(void *param) {
 							}
 						}
 						clock_gettime(CLOCK_MONOTONIC, &tmp_rules->timestamp.second);
-						logprintf(LOG_DEBUG, "rule #%d was parsed in %.6f seconds", tmp_rules->nr,
-							((double)tmp_rules->timestamp.second.tv_sec + 1.0e-9*tmp_rules->timestamp.second.tv_nsec) - 
+						logprintf(LOG_DEBUG, "rule #%d %s was parsed in %.6f seconds", tmp_rules->nr, tmp_rules->name,
+							((double)tmp_rules->timestamp.second.tv_sec + 1.0e-9*tmp_rules->timestamp.second.tv_nsec) -
 							((double)tmp_rules->timestamp.first.tv_sec + 1.0e-9*tmp_rules->timestamp.first.tv_nsec));
-												
+
 						tmp_rules->status = 0;
 					}
 					FREE(str);
@@ -1631,11 +1763,8 @@ void *events_clientize(void *param) {
 				unsigned int n = explode(recvBuff, "\n", &array), i = 0;
 				for(i=0;i<n;i++) {
 					events_queue(array[i]);
-					FREE(array[i]);
 				}
-				if(n > 0) {
-					FREE(array);
-				}
+				array_free(&array, n);
 			}
 		}
 	}

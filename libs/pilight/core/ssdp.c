@@ -38,7 +38,7 @@
 #include <unistd.h>
 
 #include "pilight.h"
-#include "common.h"
+#include "network.h"
 #include "socket.h"
 #include "log.h"
 #include "gc.h"
@@ -186,11 +186,8 @@ int ssdp_seek(struct ssdp_list_t **ssdp_list) {
 				if(match == 0 && sscanf(array[q], "Location:%hu.%hu.%hu.%hu:%hu\r\n", &nip[0], &nip[1], &nip[2], &nip[3], &port) > 0) {
 					match = 1;
 				}
-				FREE(array[q]);
 			}
-			if(n > 0) {
-				FREE(array);
-			}
+			array_free(&array, n);
 			if(match == 1) {
 				struct ssdp_list_t *node = MALLOC(sizeof(struct ssdp_list_t));
 				if(node == NULL) {
@@ -295,13 +292,12 @@ void *ssdp_wait(void *param) {
 					"SERVER: %s UPnP/1.1 pilight (%s)/%s\r\n\r\n", host, socket_get_port(), id, distro, hname, PILIGHT_VERSION);
 				nrheader++;
 			}
-			FREE(devs[x]);
 		}
-		FREE(devs);
 	} else {
 		logprintf(LOG_ERR, "could not determine default network interface");
 		exit(EXIT_FAILURE);
 	}
+	array_free(&devs, nrdevs);
 
 	if(id != NULL) {
 		FREE(id);
