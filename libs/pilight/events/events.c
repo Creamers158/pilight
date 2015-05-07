@@ -290,6 +290,9 @@ int event_lookup_variable(char *var, struct rules_t *obj, int type, struct varco
 								break;
 							} else if(strcmp(opt->name, name) == 0) {
 								match1 = 1;
+								if(opt->vartype == (JSON_NUMBER | JSON_STRING)) {
+									break;
+								}
 								if(opt->conftype == DEVICES_VALUE || opt->conftype == DEVICES_STATE || opt->conftype == DEVICES_SETTING) {
 									match2 = 1;
 									if(type == (JSON_STRING | JSON_NUMBER)) {
@@ -447,7 +450,9 @@ static int event_parse_hooks(char **rule, struct rules_t *obj, int depth, unsign
 					   e.g.: ((1 + 2) + (3 + 4))
 									 (   3    +    7   )
 					*/
-					// printf("Replace \"%s\" with \"%s\" in \"%s\"\n", replace, subrule, tmp);
+					if(pilight.debuglevel == 1) {
+						fprintf(stderr, "replace %s with %s in %s\n", replace, subrule, tmp);
+					}
 					str_replace(replace, subrule, &tmp);
 
 					FREE(replace);
@@ -582,7 +587,9 @@ static int event_parse_function(char **rule, struct rules_t *obj, unsigned short
 										 DATE_FORMAT(2014-01-02 00:00:00, %H.%s)
 						*/
 
-						// printf("Replace \"%s\" with \"%s\" in \"%s\"\n", replace, subfunction, tmp);
+						if(pilight.debuglevel == 1) {						
+							fprintf(stderr, "replace %s with %s in %s\n", replace, subfunction, tmp);
+						}
 						str_replace(replace, subfunction, &tmp);
 
 						chook = strstr(tmp, ")");
@@ -677,7 +684,9 @@ static int event_parse_function(char **rule, struct rules_t *obj, unsigned short
 	}
 
 	if(strlen(output) > 0) {
-		// printf("Replace \"%s\" with \"%s\" in \"%s\"\n", function, output, *rule);
+		if(pilight.debuglevel == 1) {
+			fprintf(stderr, "replace %s with %s in %s\n", function, output, *rule);
+		}
 		str_replace(function, output, rule);
 	}
 
@@ -833,7 +842,7 @@ static int event_parse_formula(char **rule, struct rules_t *obj, int depth, unsi
 						char *p = MALLOC(strlen(res)+1);
 						strcpy(p, res);
 						unsigned long r = 0;
-						// printf("Replace \"%s\" with \"%s\" in \"%s\"\n", search, p, tmp);
+						// printf("replace %s with %s in %s\n", search, p, tmp);
 						if((r = (unsigned long)str_replace(search, p, &tmp)) == -1) {
 							logprintf(LOG_ERR, "rule #%d: an unexpected error occured while parsing", obj->nr);
 							FREE(p);
@@ -1503,12 +1512,16 @@ int event_parse_rule(char *rule, struct rules_t *obj, int depth, unsigned short 
 			i--;
 			ltype = (type_and == 0) ? AND : OR;
 			if(skip == 0) {
-				// printf("EVALUATE: %s, %s\n", (type_and == 0) ? "AND" : "OR", condition);
+				if(pilight.debuglevel == 1) {
+					fprintf(stderr, "evaluate (%s) %s\n", (type_and == 0) ? "AND" : "OR", condition);
+				}
 				pass = event_parse_condition(&condition, obj, depth, validate);
 				error = pass;
 				i = -1;
 			} else {
-				// printf("SKIP: %s, %s\n", (type_and == 0) ? "AND" : "OR", condition);
+				if(pilight.debuglevel == 1) {
+					fprintf(stderr, "skip (%s) %s\n", (type_and == 0) ? "AND" : "OR", condition);
+				}
 				size_t y = (type_and == 0) ? 6 : 5;
 				size_t z = strlen(condition)-((size_t)i + (size_t)y);
 				memmove(condition, &condition[(size_t)i + (size_t)y], (size_t)z);
@@ -1537,18 +1550,24 @@ int event_parse_rule(char *rule, struct rules_t *obj, int depth, unsigned short 
 	}
 
 	if((ltype == AND && pass == 0) && validate == 0) {
-		// printf("SKIP: %s, %s\n", (ltype == AND) ? "AND" : "OR", condition);
+		if(pilight.debuglevel == 1) {
+			fprintf(stderr, "skip (%s) %s\n", (ltype == AND) ? "AND" : "OR", condition);
+		}
 		condition[0] = '0';
 		condition[1] = '\0';
 	/* Skip this part when the condition only contains "1" or "0" */
 	} else if(strlen(condition) > 1) {
-		// printf("EVALUATE: %s, %s\n", (ltype == AND) ? "AND" : "OR", condition);
+		if(pilight.debuglevel == 1) {
+			fprintf(stderr, "evaluate (%s) %s\n", (ltype == AND) ? "AND" : "OR", condition);
+		}
 		if(event_parse_formula(&condition, obj, depth, validate) == -1) {
 			error = -1;
 			goto close;
 		}
 	} else {
-		// printf("SKIP: %s, %s\n", (ltype == AND) ? "AND" : "OR", condition);
+		if(pilight.debuglevel == 1) {
+			fprintf(stderr, "skip (%s) %s\n", (ltype == AND) ? "AND" : "OR", condition);
+		}
 	}
 	obj->status = atoi(condition);
 	if(validate == 1 && depth == 0 && event_parse_action(action, obj, validate) != 0) {
@@ -1714,58 +1733,83 @@ static void events_queue(char *message) {
 void *events_clientize(void *param) {
 	logprintf(LOG_STACK, "%s(...)", __FUNCTION__);
 
-	unsigned int failures = 0;
-	while(loop && failures <= 5) {
-		struct ssdp_list_t *ssdp_list = NULL;
-		int standalone = 0;
-		settings_find_number("standalone", &standalone);
+	struct JsonNode *jclient = NULL;
+	struct JsonNode *joptions = NULL;
+	struct ssdp_list_t *ssdp_list = NULL;
+	char *out = NULL;
+	int standalone = 0;
+	int client_loop = 0;
+	settings_find_number("standalone", &standalone);
+
+	while(loop) {
+		
+		if(client_loop == 1) {
+			sleep(1);
+		}
+		client_loop = 1;
+		
+		ssdp_list = NULL;
 		if(ssdp_seek(&ssdp_list) == -1 || standalone == 1) {
 			logprintf(LOG_DEBUG, "no pilight ssdp connections found");
 			char server[16] = "127.0.0.1";
 			if((sockfd = socket_connect(server, (unsigned short)socket_get_port())) == -1) {
 				logprintf(LOG_DEBUG, "could not connect to pilight-daemon");
-				failures++;
 				continue;
 			}
 		} else {
 			if((sockfd = socket_connect(ssdp_list->ip, ssdp_list->port)) == -1) {
 				logprintf(LOG_DEBUG, "could not connect to pilight-daemon");
-				failures++;
 				continue;
 			}
 		}
+
 		if(ssdp_list != NULL) {
 			ssdp_free(ssdp_list);
 		}
 
-		struct JsonNode *jclient = json_mkobject();
-		struct JsonNode *joptions = json_mkobject();
+		jclient = json_mkobject();
+		joptions = json_mkobject();
 		json_append_member(jclient, "action", json_mkstring("identify"));
 		json_append_member(joptions, "config", json_mknumber(1, 0));
 		json_append_member(jclient, "options", joptions);
 		json_append_member(jclient, "media", json_mkstring("all"));
-		char *out = json_stringify(jclient, NULL);
-		socket_write(sockfd, out);
+		out = json_stringify(jclient, NULL);
+		if(socket_write(sockfd, out) != (strlen(out)+strlen(EOSS))) {
+			json_free(out);
+			json_delete(jclient);
+			continue;
+		}
 		json_free(out);
 		json_delete(jclient);
 
 		if(socket_read(sockfd, &recvBuff, 0) != 0
 			 || strcmp(recvBuff, "{\"status\":\"success\"}") != 0) {
-				failures++;
 			continue;
 		}
-		failures = 0;
-		while(loop) {
-			if(socket_read(sockfd, &recvBuff, 0) != 0) {
+
+		while(client_loop) {
+			if(sockfd <= 0) {
 				break;
-			} else {
-				char **array = NULL;
-				unsigned int n = explode(recvBuff, "\n", &array), i = 0;
-				for(i=0;i<n;i++) {
-					events_queue(array[i]);
-				}
-				array_free(&array, n);
 			}
+			if(loop == 0) {
+				client_loop = 0;
+				break;
+			}
+
+			int z = socket_read(sockfd, &recvBuff, 1);
+			if(z == -1) {
+				sockfd = 0;
+				break;
+			} else if(z == 1) {
+				continue;
+			}
+
+			char **array = NULL;
+			unsigned int n = explode(recvBuff, "\n", &array), i = 0;
+			for(i=0;i<n;i++) {
+				events_queue(array[i]);
+			}
+			array_free(&array, n);
 		}
 	}
 
