@@ -37,6 +37,7 @@ Change Log:
 0.93	- 150430 port to pilight 7.0
 0.94  - Bugfixing
 0.94b - Bugfixing GAP Length
+0.95	- New variable wakeup
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,6 +92,8 @@ Change Log:
 #define VALUE_LEN_WAKEUP	2	// Wakeup sequence length
 #define PULSE_SOMFY_WAKEUP	9415	// Wakeup pulse followed by _WAIT
 #define PULSE_SOMFY_WAKEUP_WAIT	89565
+#define PULSE_SOMFY_WAKEUP_1	10750	// Wakeup pulse followed by _WAIT
+#define PULSE_SOMFY_WAKEUP_WAIT_1	17750
 //
 //#define PULSE_MULTIPLIER   16
 //#define MIN_PULSE_LENGTH   221  7513/34
@@ -109,6 +112,8 @@ Change Log:
 int sDataTime = 0;
 int sDataLow = 0;
 int preAmb_wakeup [VALUE_LEN_WAKEUP+1] = {VALUE_LEN_WAKEUP, PULSE_SOMFY_WAKEUP, PULSE_SOMFY_WAKEUP_WAIT};
+int preAmb_wakeup_1 [VALUE_LEN_WAKEUP+1] = {VALUE_LEN_WAKEUP, PULSE_SOMFY_WAKEUP_1, PULSE_SOMFY_WAKEUP_WAIT_1};
+int wakeup_type = 0;
 
 // 01 - MY, 02 - UP, 04 - DOWN, 08 - PROG
 
@@ -414,6 +419,8 @@ static int *preAmbCode (void) {
 // Wakeup sequence called by daemon.c
 	logprintf(LOG_STACK, "%s(...)", __FUNCTION__);
 
+	if (wakeup_type == 1) return preAmb_wakeup_1;
+
 	return preAmb_wakeup;
 }
 
@@ -572,6 +579,7 @@ static int createCode(JsonNode *code) {
 	if(json_find_number(code, "address", &itmp) == 0)	address = (int)round(itmp);
 	if(json_find_number(code, "rollingcode", &itmp) == 0)	rollingcode = (int)round(itmp);
 	if(json_find_number(code, "rollingkey", &itmp) == 0)	rollingkey = (int)round(itmp);
+	if(json_find_number(code, "wakeup", &itmp) == 0)	wakeup_type = (int)round(itmp);
 
 	if(json_find_number(code, "my", &itmp) == 0) {
 		command=1;
@@ -661,6 +669,8 @@ static void printHelp(void) {
 	printf("\t -c --rollingcode=rollingcode\t\t\tset rollingcode\n");
 	printf("\t -k --rollingkey=rollingkey\t\t\tset rollingkey\n");
 	printf("\t -n --command_code=command\t\t\tNumeric Command Code\n");
+	printf("\t -w --wakeup=command\t\t\tType of Wakeup Pulse\n");
+
 }
 
 #ifndef MODULE
@@ -698,6 +708,7 @@ void somfy_rtsInit(void) {
 	options_add(&somfy_rts->options, 0, "sun+flag", OPTION_NO_VALUE, DEVICES_STATE, JSON_STRING, NULL, NULL);
 	options_add(&somfy_rts->options, 0, "flag", OPTION_NO_VALUE, DEVICES_STATE, JSON_STRING, NULL, NULL);
 
+	options_add(&somfy_rts->options, 'w', "wakeup", OPTION_HAS_VALUE, DEVICES_OPTIONAL, JSON_NUMBER, (void *)0,  "^([01])$");
 	options_add(&somfy_rts->options, 0, "readonly", OPTION_HAS_VALUE, GUI_SETTING, JSON_NUMBER, (void *)0, "^[10]{1}$");
 
 	somfy_rts->parseCode=&parseCode;
@@ -713,7 +724,7 @@ void somfy_rtsInit(void) {
 #ifdef MODULE
 void compatibility(struct module_t *module) {
 	module->name =  "somfy_rts";
-	module->version =  "0.94a";
+	module->version =  "0.95";
 	module->reqversion =  "6.0";
 	module->reqcommit =  NULL;
 }
