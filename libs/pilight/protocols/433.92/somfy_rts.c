@@ -38,6 +38,7 @@ Change Log:
 0.94  - Bugfixing
 0.94b - Bugfixing GAP Length
 0.95	- New variable wakeup
+0.96	- Increased size of binary buffer and added monitroing of pointers
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,6 +115,8 @@ int sDataLow = 0;
 int preAmb_wakeup [VALUE_LEN_WAKEUP+1] = {VALUE_LEN_WAKEUP, PULSE_SOMFY_WAKEUP, PULSE_SOMFY_WAKEUP_WAIT};
 int preAmb_wakeup_1 [VALUE_LEN_WAKEUP+1] = {VALUE_LEN_WAKEUP, PULSE_SOMFY_WAKEUP_1, PULSE_SOMFY_WAKEUP_WAIT_1};
 int wakeup_type = 0;
+int pMaxbin = 0;
+int pMaxraw = 0;
 
 // 01 - MY, 02 - UP, 04 - DOWN, 08 - PROG
 
@@ -202,7 +205,7 @@ static void parseCode(void) {
 	int pBin = 0, pRaw = 0;
 	int protocol_sync = 0;
 	int rDataLow = 0, rDataTime = 0;
-	int rollingcode = 0, rollingkey = 0, binary[BIN_LENGTH];
+	int rollingcode = 0, rollingkey = 0, binary[MAXPULSESTREAMLENGTH];
 	uint8_t dec_frame[BIN_ARRAY_SOMFY_PROT] = { 0 };
 	uint8_t frame[BIN_ARRAY_SOMFY_PROT] = { 0 };
 
@@ -245,6 +248,7 @@ static void parseCode(void) {
 				rDataTime = PULSE_SOMFY_SHORT;
 				binary[pBin]=1;
 				pBin=pBin+1;
+				if(pBin>pMaxbin)pMaxbin=pBin;
 			} else {
 			// if it is neither a short nor a long pulse, we try to find another SYNC pulse
 				protocol_sync=0;
@@ -264,7 +268,7 @@ static void parseCode(void) {
 						logprintf(LOG_DEBUG, "somfy_rts: prot 2b");
 					} else {
 						protocol_sync=96; // We should never end up here as binary bits are missing
-						logprintf(LOG_DEBUG, "somfy_rts: Err 21. Payload incomplete.");
+						logprintf(LOG_DEBUG, "somfy_rts: Err 21. Payload incomplete: bin:%d raw:%d",pBin,pRaw);
 					}
 				}
 				break;
@@ -280,6 +284,7 @@ static void parseCode(void) {
 					binary[pBin]=1;
 				}
 				pBin=pBin+1;
+				if(pBin>pMaxbin)pMaxbin=pBin;
 				rDataTime = PULSE_SOMFY_SHORT;
 				if (pBin >= BINLEN_SOMFY_CLASSIC) {
 					protocol_sync = 3;	// We got all bits for classic data frame
@@ -311,6 +316,7 @@ static void parseCode(void) {
 					binary[pBin]=1;
 				}
 				pBin=pBin+1;
+				if(pBin>pMaxbin)pMaxbin=pBin;
 				rDataTime = PULSE_SOMFY_SHORT;
 				if (pBin >= BINLEN_SOMFY_CLASSIC) {
 					protocol_sync = 4;	// We got all bits for classic data frame
@@ -348,6 +354,7 @@ static void parseCode(void) {
 			break;
 		}
 		pRaw++;
+		if (pRaw>pMaxraw)pMaxraw=pRaw; // Monitor maximum value
 		if (protocol_sync > 95) {
 			logprintf(LOG_DEBUG, "**** somfy_rts RAW CODE ****");
 			if(log_level_get() >= LOG_DEBUG) {
@@ -476,6 +483,7 @@ static int checkValues(struct JsonNode *jvalues) {
 
 static void gc(void) {
 	struct settings_t *tmp = NULL;
+	logprintf(LOG_DEBUG, "somfy_rts: pMaxbin: %d pMaxraw: %d",pMaxbin, pMaxraw);
 	while(settings) {
 		tmp = settings;
 		settings = settings->next;
@@ -724,7 +732,7 @@ void somfy_rtsInit(void) {
 #ifdef MODULE
 void compatibility(struct module_t *module) {
 	module->name =  "somfy_rts";
-	module->version =  "0.95";
+	module->version =  "0.96";
 	module->reqversion =  "6.0";
 	module->reqcommit =  NULL;
 }

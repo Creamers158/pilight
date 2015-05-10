@@ -1535,15 +1535,25 @@ void *receiveOOK(void *param) {
 				if(r.length > MAXPULSESTREAMLENGTH-1) {
 					r.length = 0;
 				}
+/*
 				if(duration > mingaplen) {
 					if(duration < maxgaplen) {
 						plslen = duration/PULSE_DIV;
 					}
-					/* Let's do a little filtering here as well */
+					// Let's do a little filtering here as well
 					if(r.length >= minrawlen && r.length <= maxrawlen) {
 						receive_queue(r.pulses, r.length, plslen, hw->hwtype);
 					}
 					r.length = 0;
+				}
+*/
+				if(duration > mingaplen && duration < maxgaplen) {
+					plslen = duration/PULSE_DIV;
+					// Let's do a little filtering here as well
+					if(r.length >= minrawlen && r.length <= maxrawlen) {
+						receive_queue(r.pulses, r.length, plslen, hw->hwtype);
+					}
+					if (r.length > 20) r.length = 0;
 				}
 			/* Hardware failure */
 			} else if(duration == -1) {
