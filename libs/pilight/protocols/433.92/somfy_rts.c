@@ -39,6 +39,7 @@ Change Log:
 0.94b - Bugfixing GAP Length
 0.95	- New variable wakeup
 0.96	- Increased size of binary buffer and added monitroing of pointers
+0.96a	- Enlarge footer range to 32950
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,12 +74,15 @@ Change Log:
 // The footer detection also depends on pilight-daemon, the standard footer variation is -/+ 170 (5*34)
 // The value in daemon.c packaged with this distribution is currently set to -/+ 850 (25*34)
 // #define PULSE_SOMFY_FOOTER	1498	// 50932/PULSE_DIV, if last symbol is low plus _SHORT
+#define PULSE_SOMFY_FOOTER_1	955	// 32500/PULSE_DIV, if last symbol is low plus _SHORT
 // #define PULSE_SOMFY_FOOTER	895	// 30430/PULSE_DIV, if last symbol is low plus _SHORT
 #define PULSE_SOMFY_FOOTER	809	// 27506/PULSE_DIV, if last symbol is low plus _SHORT
 // #define PULSE_SOMFY_FOOTER	800	// 27200/PULSE_DIV, if last symbol is low plus _SHORT
 // #define PULSE_SOMFY_FOOTER	221	// 7531/PULSE_DIV, if last symbol is low plus _SHORT
 #define PULSE_SOMFY_FOOTER_L	(PULSE_SOMFY_FOOTER-25)*PULSE_DIV
 #define PULSE_SOMFY_FOOTER_H	(PULSE_SOMFY_FOOTER+25)*PULSE_DIV+PULSE_SOMFY_SHORT_H
+#define PULSE_SOMFY_FOOTER_L_1	(PULSE_SOMFY_FOOTER_1-5)*PULSE_DIV
+#define PULSE_SOMFY_FOOTER_H_1	(PULSE_SOMFY_FOOTER_1+5)*PULSE_DIV+PULSE_SOMFY_SHORT_H
 // Bin / Rawlength definitions
 // binlen Classic protocol: 56 - new_gen protocol: 56+24=80
 // rawlen Classic protocol: 73 .. 129  - new_gen protocol: 97 .. 177
@@ -145,8 +149,10 @@ static int validate(void) {
 
 	if((somfy_rts->rawlen > MINRAWLEN_SOMFY_PROT) &&
 		(somfy_rts->rawlen < MAXRAWLEN_SOMFY_PROT)) {
-		if((somfy_rts->raw[somfy_rts->rawlen-1] > PULSE_SOMFY_FOOTER_L) &&
-			(somfy_rts->raw[somfy_rts->rawlen-1] < PULSE_SOMFY_FOOTER_H)) {
+		if(((somfy_rts->raw[somfy_rts->rawlen-1] > PULSE_SOMFY_FOOTER_L) &&
+			 (somfy_rts->raw[somfy_rts->rawlen-1] < PULSE_SOMFY_FOOTER_H)) ||
+		   ((somfy_rts->raw[somfy_rts->rawlen-1] > PULSE_SOMFY_FOOTER_L_1) &&
+			 (somfy_rts->raw[somfy_rts->rawlen-1] < PULSE_SOMFY_FOOTER_H_1))) {
 			if((somfy_rts->raw[2] > PULSE_SOMFY_SYNC_L) &&
 				(somfy_rts->raw[2] < PULSE_SOMFY_SYNC_H)) {
 					return 0;
@@ -326,7 +332,8 @@ static void parseCode(void) {
 			case 4:
 			// We decoded the number of bis for classic data and new generation, check for footer pulse
 			logprintf(LOG_DEBUG, "somfy_rts: End of new generation data. pulse: %d - pRaw: %d - bin: %d", somfy_rts->raw[pRaw], pRaw, pBin);
-			if ((somfy_rts->raw[pRaw] > PULSE_SOMFY_FOOTER_L) && (somfy_rts->raw[pRaw] < PULSE_SOMFY_FOOTER_H)) {
+			if (((somfy_rts->raw[pRaw] > PULSE_SOMFY_FOOTER_L) && (somfy_rts->raw[pRaw] < PULSE_SOMFY_FOOTER_H)) ||
+				 ((somfy_rts->raw[pRaw] > PULSE_SOMFY_FOOTER_L_1) && (somfy_rts->raw[pRaw] < PULSE_SOMFY_FOOTER_H_1)) ){
 				protocol_sync = 98;
 			} else {
 				protocol_sync = 5;
@@ -732,7 +739,7 @@ void somfy_rtsInit(void) {
 #ifdef MODULE
 void compatibility(struct module_t *module) {
 	module->name =  "somfy_rts";
-	module->version =  "0.96";
+	module->version =  "0.96a";
 	module->reqversion =  "6.0";
 	module->reqcommit =  NULL;
 }
