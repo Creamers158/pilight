@@ -37,9 +37,10 @@ Change Log:
 0.93	- 150430 port to pilight 7.0
 0.94  - Bugfixing
 0.94b - Bugfixing GAP Length
-0.95	- New variable wakeup
-0.96	- Increased size of binary buffer and added monitroing of pointers
+0.95	- New variable wakeup / wakeup_type 0: Telis-1, 1: Smoove, default: 0
+0.96	- Increased size of binary buffer and added monitoring of pointers
 0.96a	- Enlarge footer range to 32950
+0.97	- Default wakeup type 1, editorial corrections
 */
 #include <stdio.h>
 #include <stdlib.h>
@@ -100,16 +101,7 @@ Change Log:
 #define PULSE_SOMFY_WAKEUP_1	10750	// Wakeup pulse followed by _WAIT
 #define PULSE_SOMFY_WAKEUP_WAIT_1	17750
 //
-//#define PULSE_MULTIPLIER   16
-//#define MIN_PULSE_LENGTH   221  7513/34
-//#define AVG_PULSE_LENGTH   895  30415/34
-//#define MAX_PULSE_LENGTH   1498 50900/34
-//#define ZERO_PULSE
-//#define ONE_PULSE
-//#define AVG_PULSE (ZERO_PULSE+ONE_PULSE)/2
 #define RAW_LENGTH RAWLEN_SOMFY_PROT
-//#define MIN_PULSE_LENGTH   MINRAWLEN_SOMFY_PROT
-//#define AVG_PULSE_LENGTH   MAXRAWLEN_SOMFY_PROT
 #define BIN_LENGTH BINLEN_SOMFY_PROT
 //#define LEARN_REPEATS 4
 //#define NORMAL_REPEATS 4
@@ -155,7 +147,7 @@ static int validate(void) {
 			 (somfy_rts->raw[somfy_rts->rawlen-1] < PULSE_SOMFY_FOOTER_H_1))) {
 			if((somfy_rts->raw[2] > PULSE_SOMFY_SYNC_L) &&
 				(somfy_rts->raw[2] < PULSE_SOMFY_SYNC_H)) {
-					return 0;
+				return 0;
 			}
 		}
 	}
@@ -209,14 +201,11 @@ static void createMessage(int address, int command, int rollingcode, int rolling
 static void parseCode(void) {
 	int i, x;
 	int pBin = 0, pRaw = 0;
-	int protocol_sync = 0;
-	int rDataLow = 0, rDataTime = 0;
+	int protocol_sync = 0, rDataLow = 0, rDataTime = 0;
 	int rollingcode = 0, rollingkey = 0, binary[MAXPULSESTREAMLENGTH];
+	int cksum = 0, key_left = 0, command = 0, address = 0;
 	uint8_t dec_frame[BIN_ARRAY_SOMFY_PROT] = { 0 };
 	uint8_t frame[BIN_ARRAY_SOMFY_PROT] = { 0 };
-
-	int cksum = 0;
-	int key_left = 0, command = 0, address = 0;
 
 	logprintf(LOG_STACK, "%s(...)", __FUNCTION__);
 	// Decode Manchester pulse stream into binary
@@ -384,7 +373,7 @@ static void parseCode(void) {
 		frame[5] = (uint8_t) binToDecRev(binary, 40,47);
 		frame[6] = (uint8_t) binToDecRev(binary, 48,55);
 
-		dec_frame[0]=frame[0];
+		dec_frame[0] = frame[0];
 		for (i=1; i < BIN_ARRAY_SOMFY_PROT; i++) {
 			dec_frame[i] = frame[i] ^ frame[i-1];
 		}
@@ -723,7 +712,7 @@ void somfy_rtsInit(void) {
 	options_add(&somfy_rts->options, 0, "sun+flag", OPTION_NO_VALUE, DEVICES_STATE, JSON_STRING, NULL, NULL);
 	options_add(&somfy_rts->options, 0, "flag", OPTION_NO_VALUE, DEVICES_STATE, JSON_STRING, NULL, NULL);
 
-	options_add(&somfy_rts->options, 'w', "wakeup", OPTION_HAS_VALUE, DEVICES_OPTIONAL, JSON_NUMBER, (void *)0,  "^([01])$");
+	options_add(&somfy_rts->options, 'w', "wakeup", OPTION_HAS_VALUE, DEVICES_OPTIONAL, JSON_NUMBER, (void *)1,  "^([01])$");
 	options_add(&somfy_rts->options, 0, "readonly", OPTION_HAS_VALUE, GUI_SETTING, JSON_NUMBER, (void *)0, "^[10]{1}$");
 
 	somfy_rts->parseCode=&parseCode;
@@ -739,7 +728,7 @@ void somfy_rtsInit(void) {
 #ifdef MODULE
 void compatibility(struct module_t *module) {
 	module->name =  "somfy_rts";
-	module->version =  "0.96a";
+	module->version =  "0.97";
 	module->reqversion =  "6.0";
 	module->reqcommit =  NULL;
 }
